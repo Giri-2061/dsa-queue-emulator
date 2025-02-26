@@ -1,0 +1,582 @@
+// Project Code from CMakeLists.txt
+// Total files: 12
+
+//===== FILE: src/main.cpp =====//
+
+// src/main.cpp
+#include <SDL3/SDL.h>
+#include "managers/TrafficManager.h"
+#include "managers/FileHandler.h"
+#include "visualization/Renderer.h"
+#include <iostream>
+#include <chrono>
+
+class Simulator {
+private:
+    TrafficManager trafficManager;
+    Renderer renderer;
+    bool running;
+
+    void processInput() {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            switch (event.type) {
+                case SDL_EVENT_QUIT:
+                    running = false;
+                    break;
+                case SDL_EVENT_KEY_DOWN:
+                    // For SDL3, we use scancode instead of keysym
+                    if (event.key.scancode == SDL_SCANCODE_ESCAPE) {
+                        running = false;
+                    }
+                    break;
+            }
+        }
+    }
+
+    void update(float deltaTime) {
+        trafficManager.update(deltaTime);
+    }
+
+    void render() {
+        renderer.render(trafficManager);
+    }
+
+public:
+    Simulator() : running(false) {}
+
+    bool initialize() {
+        if (!renderer.initialize()) {
+            std::cerr << "Failed to initialize renderer" << std::endl;
+            return false;
+        }
+
+        // Clear any existing vehicle data
+        FileHandler fileHandler;
+        fileHandler.clearLaneFiles();
+
+        running = true;
+        return true;
+    }
+
+    void run() {
+        auto lastUpdateTime = std::chrono::high_resolution_clock::now();
+
+        while (running) {
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float>(currentTime - lastUpdateTime).count();
+            lastUpdateTime = currentTime;
+
+            processInput();
+            update(deltaTime);
+            render();
+
+            // Cap frame rate at ~60 FPS
+            if (deltaTime < 0.016f) {
+                SDL_Delay(static_cast<uint32_t>((0.016f - deltaTime) * 1000));
+            }
+        }
+    }
+
+    void cleanup() {
+        renderer.cleanup();
+    }
+};
+
+int main(int argc, char* argv[]) {
+    (void)argc; // Suppress unused parameter warning
+    (void)argv; // Suppress unused parameter warning
+
+    Simulator simulator;
+
+    if (!simulator.initialize()) {
+        std::cerr << "Failed to initialize simulator" << std::endl;
+        return 1;
+    }
+
+    std::cout << "Traffic Simulator Started\n";
+    std::cout << "Press ESC to exit\n";
+
+    simulator.run();
+    simulator.cleanup();
+
+    return 0;
+}
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\core\Constants.h =====//
+
+// include/core/Constants.h
+#pragma once
+#include <cstdint>
+
+enum class LaneId {
+    AL1_INCOMING,
+    AL2_PRIORITY,
+    AL3_FREELANE,
+    BL1_INCOMING,
+    BL2_NORMAL,
+    BL3_FREELANE,
+    CL1_INCOMING,
+    CL2_NORMAL,
+    CL3_FREELANE,
+    DL1_INCOMING,
+    DL2_NORMAL,
+    DL3_FREELANE
+};
+
+enum class Direction {
+    STRAIGHT,
+    LEFT,
+    RIGHT
+};
+
+enum class LightState {
+    RED,
+    GREEN
+};
+
+// Add operator== for LightState
+inline bool operator==(LightState lhs, LightState rhs) {
+    return static_cast<int>(lhs) == static_cast<int>(rhs);
+}
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\core\Lane.h =====//
+
+// Lane.h
+#pragma once
+#include "Vehicle.h"
+#include "utils/Queue.h"
+#include <memory>
+#include <string>
+
+class Lane {
+private:
+    LaneId id;
+    Queue<std::shared_ptr<Vehicle>> vehicleQueue;
+    bool isPriority;
+    std::string dataFile;
+
+public:
+    Lane(LaneId id, bool isPriority);
+
+    void addVehicle(std::shared_ptr<Vehicle> vehicle);
+    std::shared_ptr<Vehicle> removeVehicle();
+    Direction getVehicleDirection(size_t index) const;  // Add this method
+    size_t getQueueSize() const;
+    bool isPriorityLane() const;
+    LaneId getId() const;
+    const std::string& getDataFile() const;
+    void update();
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\core\TrafficLight.h =====//
+
+// TrafficLight.h
+#pragma once
+#include <SDL3/SDL.h>
+#include "Constants.h"
+#include <cstdint>
+
+class TrafficLight {
+private:
+    LightState state;
+    LightState nextState;
+    float transitionProgress;
+    float transitionDuration;
+    float stateTimer;
+    bool isTransitioning;
+
+public:
+    TrafficLight();  // Just declare the constructor here
+    void update(float deltaTime);
+    void setState(LightState newState);
+    LightState getState() const;
+    void render(SDL_Renderer* renderer, float x, float y) const;
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\core\Vehicle.h =====//
+
+// include/core/Vehicle.hpp
+#pragma once
+#include "Constants.h"
+#include <cstdint>
+
+class Vehicle {
+private:
+    uint32_t id;
+    Direction direction;
+    LaneId currentLane;
+
+public:
+    Vehicle(uint32_t id, Direction dir, LaneId lane);
+    uint32_t getId() const;
+    Direction getDirection() const;
+    LaneId getCurrentLane() const;
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\managers\FileHandler.h =====//
+
+// include/managers/FileHandler.hpp
+#pragma once
+#include "core/Vehicle.h"
+#include <memory>
+#include <vector>
+#include <string>
+#include <map>
+#include <filesystem>
+#include <fstream>
+
+class FileHandler {
+private:
+    std::map<LaneId, std::filesystem::path> laneFiles;
+    std::map<std::filesystem::path, int64_t> lastReadPositions;
+    std::filesystem::path dataDir;
+
+public:
+    FileHandler();  // Declaration only, definition will be in cpp file
+
+    std::vector<std::pair<LaneId, std::shared_ptr<Vehicle>>> readNewVehicles();
+    void clearLaneFiles();
+
+private:
+    std::vector<std::shared_ptr<Vehicle>> parseVehicleData(const std::string& data, LaneId laneId);
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\managers\IntersectionController.h =====//
+
+// include/managers/IntersectionController.h
+#pragma once
+#include "core/Constants.h"
+#include "core/Lane.h"
+#include "utils/PriorityQueue.h"
+#include <memory>
+#include <vector>
+
+class IntersectionController {
+private:
+    PriorityQueue<LaneId> laneQueue;
+    std::vector<std::unique_ptr<Lane>>& lanes;
+    bool isPriorityMode;
+    float stateTimer;
+    float vehicleProcessTime;
+
+    // Helper methods
+    void updateLanePriorities();
+    float calculateAverageWaitingVehicles() const;
+    void processVehicles(size_t count);
+    void handlePriorityLane();
+
+public:
+    IntersectionController(std::vector<std::unique_ptr<Lane>>& lanes);
+    void update(float deltaTime);
+    bool isInPriorityMode() const { return isPriorityMode; }
+    void setVehicleProcessTime(float time) { vehicleProcessTime = time; }
+};
+
+
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\managers\TrafficManager.h =====//
+
+// include/managers/TrafficManager.h
+#pragma once
+#include <vector>
+#include <memory>
+#include <map>
+#include "core/Constants.h"
+#include "core/Lane.h"
+#include "core/TrafficLight.h"
+#include "core/Vehicle.h"
+#include "managers/FileHandler.h"
+
+struct VehicleState {
+    std::shared_ptr<Vehicle> vehicle;
+    float x, y;             // Current position
+    float targetX, targetY; // Target position
+    float speed;            // Movement speed
+    bool isMoving;
+    Direction direction;
+    bool hasStartedTurn;
+    float turnProgress;
+    float waitTime;
+};
+
+class TrafficManager {
+private:
+    std::vector<std::unique_ptr<Lane>> lanes;
+    std::map<LaneId, TrafficLight> trafficLights;
+    std::map<uint32_t, VehicleState> activeVehicles;
+    bool inPriorityMode;
+    float stateTimer;
+    float lastUpdateTime;
+    float vehicleProcessInterval;
+
+    // Helper methods
+    void updateVehiclePositions(float deltaTime);
+    void updateVehicleQueuePosition(VehicleState& state, LaneId laneId, size_t queuePosition);
+    void calculateTargetPosition(VehicleState& state, LaneId laneId);
+    void updateTrafficLights(float deltaTime);
+    void synchronizeTrafficLights();
+    bool checkPriorityConditions() const;
+    void processPriorityLane();
+    void processNormalLanes(size_t vehicleCount);
+    size_t calculateVehiclesToProcess() const;
+    bool canProcessVehicle(LaneId laneId) const;
+    float calculateTurningRadius(Direction dir) const;
+    bool checkCollision(const VehicleState& state, float newX, float newY) const;
+
+public:
+    TrafficManager();
+    void update(float deltaTime);
+    void addVehicleToLane(LaneId laneId, std::shared_ptr<Vehicle> vehicle);
+    void addNewVehicleToState(std::shared_ptr<Vehicle> vehicle, LaneId laneId);
+    size_t getLaneSize(LaneId laneId) const;
+    bool isInPriorityMode() const { return inPriorityMode; }
+    const std::vector<std::unique_ptr<Lane>>& getLanes() const { return lanes; }
+    const std::map<LaneId, TrafficLight>& getTrafficLights() const { return trafficLights; }
+    const std::map<uint32_t, VehicleState>& getActiveVehicles() const { return activeVehicles; }
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\utils\PriorityQueue.h =====//
+
+// include/utils/PriorityQueue.hpp
+#pragma once
+#include "Queue.h"
+
+template <typename T> class PriorityQueue : public Queue<T> {
+  struct PriorityNode : public Queue<T>::Node {
+    int priority;
+    PriorityNode(const T &value, int p) : Queue<T>::Node(value), priority(p) {}
+  };
+
+public:
+  void enqueuePriority(const T &value, int priority) {
+    auto newNode = std::make_shared<PriorityNode>(value, priority);
+
+    if (this->isEmpty() ||
+        static_cast<PriorityNode *>(this->front.get())->priority < priority) {
+      newNode->next = this->front;
+      this->front = newNode;
+    } else {
+      auto current = this->front;
+      while (current->next &&
+             static_cast<PriorityNode *>(current->next.get())->priority >=
+                 priority) {
+        current = current->next;
+      }
+      newNode->next = current->next;
+      current->next = newNode;
+    }
+    this->size++;
+  }
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\utils\Queue.h =====//
+
+// include/utils/Queue.h
+#pragma once
+#include <memory>
+#include <stdexcept>
+
+template<typename T>
+class Queue {
+protected:
+    struct Node {
+        T data;
+        std::shared_ptr<Node> next;
+        Node(const T& value) : data(value), next(nullptr) {}
+    };
+
+    std::shared_ptr<Node> front;
+    std::shared_ptr<Node> rear;
+    size_t size;
+
+public:
+    Queue() : front(nullptr), rear(nullptr), size(0) {}
+
+    virtual ~Queue() = default;
+
+    void enqueue(const T& value) {
+        auto newNode = std::make_shared<Node>(value);
+        if (isEmpty()) {
+            front = rear = newNode;
+        } else {
+            rear->next = newNode;
+            rear = newNode;
+        }
+        size++;
+    }
+
+    T dequeue() {
+        if (isEmpty()) {
+            throw std::runtime_error("Queue is empty");
+        }
+
+        T value = front->data;
+        front = front->next;
+        size--;
+
+        if (isEmpty()) {
+            rear = nullptr;
+        }
+
+        return value;
+    }
+
+    bool isEmpty() const {
+        return front == nullptr;
+    }
+
+    size_t getSize() const {
+        return size;
+    }
+
+    T peek() const {
+        if (isEmpty()) {
+            throw std::runtime_error("Queue is empty");
+        }
+        return front->data;
+    }
+
+    // Add index-based peek
+    T peek(size_t index) const {
+        if (index >= size) {
+            throw std::out_of_range("Index out of bounds");
+        }
+
+        auto current = front;
+        for (size_t i = 0; i < index; i++) {
+            current = current->next;
+        }
+        return current->data;
+    }
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\visualization\DebugOverlay.h =====//
+
+// include/visualization/DebugOverlay.h
+#pragma once
+#define _USE_MATH_DEFINES
+#include <cmath>
+#include <SDL3/SDL.h>
+#include "managers/TrafficManager.h"
+#include <map>
+
+class DebugOverlay {
+private:
+    struct LaneStatistics {
+        int vehicleCount;
+        float avgWaitTime;
+        int processedCount;
+    };
+
+    std::map<LaneId, LaneStatistics> stats;
+    void updateStatistics(const TrafficManager& trafficManager);
+    void renderQueueStats(SDL_Renderer* renderer, int x, int y);
+    void renderLaneLoadIndicator(SDL_Renderer* renderer, int x, int y);
+    void renderSystemStatus(SDL_Renderer* renderer, int x, int y);
+
+public:
+    DebugOverlay() = default;
+    void render(SDL_Renderer* renderer, const TrafficManager& trafficManager);
+};
+
+
+//===== END FILE: {file_path} =====//
+
+//===== FILE: c:\Users\paric\OneDrive\Desktop\dsa-project\dsa-queue-simulator\include\visualization\Renderer.h =====//
+
+// include/visualization/Renderer.h
+#pragma once
+#include <SDL3/SDL.h>
+#include "managers/TrafficManager.h"
+#include "visualization/DebugOverlay.h"
+#include <memory>
+#include <map>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+class Renderer {
+private:
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+    DebugOverlay debugOverlay;
+
+    // Constants for visualization
+    static constexpr int WINDOW_WIDTH = 1024;
+    static constexpr int WINDOW_HEIGHT = 768;
+    static constexpr int ROAD_WIDTH = 180;
+    static constexpr int LANE_WIDTH = 60;
+    static constexpr int CENTER_X = WINDOW_WIDTH / 2;
+    static constexpr int CENTER_Y = WINDOW_HEIGHT / 2;
+
+    static constexpr float VEHICLE_WIDTH = 30.0f;
+    static constexpr float VEHICLE_HEIGHT = 20.0f;
+    static constexpr float VEHICLE_SPACING = 45.0f;
+
+    // Helper functions
+    void renderBackground();
+    void renderRoads();
+    void renderLanes();
+    void renderIntersection();
+    void renderCrosswalks();
+    void renderTrafficLights(const std::map<LaneId, TrafficLight>& lights);
+    void renderVehicles(const std::map<uint32_t, VehicleState>& vehicles);
+    void renderVehicle(float x, float y, Direction dir, bool isPriority, float angle, bool isMoving);
+    void renderLaneIdentifiers();
+    void renderVehicleCount(const TrafficManager& trafficManager);
+    void renderPriorityIndicator(bool isInPriorityMode);
+    void renderStopLines();
+    void renderArrows();
+
+    // Utility functions
+    void drawDashedLine(float x1, float y1, float x2, float y2, float dashLength, float gapLength);
+    void drawArrow(float x, float y, float angle, Direction dir);
+    SDL_FPoint rotatePoint(float x, float y, float cx, float cy, float angle);
+    void renderRoundedRect(float x, float y, float w, float h, float radius);
+
+public:
+    Renderer();
+    ~Renderer();
+
+    bool initialize();
+    void render(const TrafficManager& trafficManager);
+    void cleanup();
+    bool isInitialized() const { return window != nullptr && renderer != nullptr; }
+};
+
+
+//===== END FILE: {file_path} =====//
+
