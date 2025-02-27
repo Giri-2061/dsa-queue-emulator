@@ -2,7 +2,7 @@
 
 > *An advanced queue-based traffic management solution for complex intersections*
 
-![Traffic Junction Simulator Demo](SarbeshKc.gif)
+![Traffic Junction Simulator Demo](dsa.gif)
 
 ## 🔄 SYSTEM OVERVIEW
 
