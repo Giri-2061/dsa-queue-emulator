@@ -117,7 +117,7 @@ make -j$(nproc)
 #### Windows
 ```powershell
 # Clone the repository
-git clone https://github.com/sarbeshkc/dsa-queue-simulator.git
+git clone https://github.com/Giri-2061/dsa-queue-simulator.git
 cd dsa-queue-simulator
 
 # Create build directory
