@@ -102,28 +102,19 @@ Alternatively, compile SDL3 and place it within a `libs/SDL3_install` directory 
 
 #### Linux/macOS
 ```bash
-# Clone the repository
-git clone https://github.com/sarbeshkc/dsa-queue-simulator.git
+
+git clone https://github.com/Giri-2061/dsa-queue-simulator.git
 cd dsa-queue-simulator
-
-# Create build directory
 mkdir build && cd build
-
-# Configure and build
 cmake ..
 make -j$(nproc)
 ```
 
 #### Windows
 ```powershell
-# Clone the repository
-git clone https://github.com/sarbeshkc/dsa-queue-simulator.git
+git clone https://github.com/Giri-2061/dsa-queue-simulator.git
 cd dsa-queue-simulator
-
-# Create build directory
 mkdir build && cd build
-
-# Configure and build with Visual Studio
 cmake .. -G "Visual Studio 17 2022" -A x64
 cmake --build . --config Release
 ```
@@ -156,7 +147,7 @@ Both components must run simultaneously:
 dsa-queue-simulator/
 ├── CMakeLists.txt          # CMake build configuration
 ├              
-│── SarbeshKc.gif           # Demonstration animation
+│── dsa.gif           # Demonstration animation
 ├── include/                # Header files
 │   ├── core/               # Core simulation components
 │   │   ├── Constants.h     # Simulation constants
